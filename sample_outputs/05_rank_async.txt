@@ -1,0 +1,5 @@
+0.73  impact=0.90 feas=0.60  An app that matches food bank surplus with nearby shelters in real time.
+0.60  impact=0.78 feas=0.60  A browser extension that rewrites dense government forms in plain language.
+0.07  impact=0.17 feas=0.97  A Discord bot that tells jokes.
+0.03  impact=0.13 feas=0.36  A blockchain-based NFT marketplace for rare sneakers.
+0.01  impact=0.22 feas=0.04  A custom operating system kernel written from scratch in Rust.

@@ -1,0 +1,14 @@
+billing? 0.99
+tone:    frustrated
+urgency: 2.0
+
+[noul]   is_billing: P(yes) = 0.99  ####################
+[choice] tone: 'frustrated'  (confidence 0.30)
+           0.53 ###########......... frustrated
+           0.47 #########........... angry
+           0.00 .................... calm
+[score]  urgency: 2.00 on a 0-2 scale  (confidence 1.00)
+           0.00 .................... 0: can wait a week
+           0.00 .................... 1: should be handled this week
+           1.00 #################### 2: needs a reply today
+

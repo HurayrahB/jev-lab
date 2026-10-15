@@ -1,0 +1,15 @@
+[noul]   mentions_battery: P(yes) = 1.00  ####################
+[noul]   mentions_support: P(yes) = 1.00  ####################
+[noul]   would_recommend: P(yes) = 0.24  #####...............
+[choice] biggest_complaint: 'camera'  (confidence 0.84)
+           0.87 #################... camera
+           0.13 ###................. support
+           0.00 .................... battery
+           0.00 .................... price
+           0.00 .................... none
+[score]  satisfaction: 0.99 on a 0-2 scale  (confidence 0.98)
+           0.01 .................... 0: Very unhappy; regrets the purchase
+           0.99 #################### 1: Mixed; real positives and real negatives
+           0.00 .................... 2: Happy; minor gripes at most
+
+Biggest complaint: camera

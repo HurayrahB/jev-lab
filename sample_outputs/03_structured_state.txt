@@ -1,0 +1,9 @@
+[noul]   asks_refund: P(yes) = 0.99  ####################
+[noul]   charges_confirm_duplicate: P(yes) = 0.97  ###################.
+[noul]   policy_allows: P(yes) = 0.99  ####################
+[score]  support_progress: 1.00 on a 0-2 scale  (confidence 1.00)
+           0.00 .................... 0: No response yet
+           1.00 #################### 1: Acknowledged but not resolved
+           0.00 .................... 2: Fully resolved
+
+-> Auto-approve refund

@@ -1,0 +1,16 @@
+'remind me tomorrow to submit the devpost, this is super important'
+   intent=reminder (confidence 1.00)
+   set_reminder(when='tomorrow', important=True)
+
+'put on something to help me grind through this bug at 3am'
+   intent=music (confidence 0.87)
+   play_music(mood='focus', energy=1.4)
+
+'where did I write down the wifi password'
+   intent=notes (confidence 0.97)
+   search_notes()
+
+"what's the capital of france"
+   intent=unknown (confidence 1.00)
+   -> fallback: ask the user to rephrase / hand to an LLM
+
