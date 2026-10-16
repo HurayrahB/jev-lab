@@ -1,17 +1,37 @@
-# Lab notes
+# Jev lab notes
 
-What I found running these experiments against `jev-latest`. Raw outputs are in [`sample_outputs/`](sample_outputs/).
+What I found running small experiments against TypeSafe's Jev model (`jev-latest`) with the Python SDK (`pip install typesafe-sdk`, version 0.7.5). This file stands on its own: every experiment is described here, and no other files are needed. Docs: https://docs.typesafe.ai (index at https://docs.typesafe.ai/llms.txt).
+
+## Jev in 30 seconds
+
+Jev doesn't write text. You send it:
+- **`state`**: the thing to judge. This can be a string, a JSON dict or list, or images.
+- **`questions`**: named judgments about that state.
+
+It returns typed probabilities, fast, and your code makes the decisions.
+
+| Primitive | Use it for | You get back |
+|---|---|---|
+| `Noul(instructions=..., criteria={"true": ..., "false": ...})` | Is X true? | `.noul` = P(yes), 0..1 |
+| `Choice(instructions=..., criteria={option: description})` | Pick one option from a set | `.choice`, `.probabilities`, `.confidence` |
+| `Score(instructions=..., criteria=[lowest, ..., highest])` | A degree on ordered levels | `.score` (float index), `.probabilities`, `.confidence` |
+
+- Question IDs (the dict keys) are never sent to the model, so the instructions must carry the full meaning.
+- To refer to part of a dict state, use backticks, e.g. `` `order.charges` ``.
+- All questions in one request run in parallel and can't see each other's answers.
+- Read the answers with `response.nouls[id].noul`, `response.choices[id]` and `response.scores[id]`.
 
 ## Setup gotchas
 
 - **The model name is `jev-latest`, not `jev`.** The SDK usage docs show `TypeSafeClient(model="jev")`, but the API returned `400 Unknown model: jev`. Run `TypeSafeClient().models.list()` to see what your key can use. Mine returned `jev-latest` and `jev-preview`.
-- The SDK reads `TYPESAFE_API_KEY` from the environment. I load it from `.env` with `python-dotenv` and fail early with a friendly message when it's missing (see `jev.py`).
-- An invalid key raises `TypeSafeAuthenticationError` (401), and a bad request raises `TypeSafeBadRequestError` (400). Both are importable from `typesafe_sdk`.
+- The SDK reads `TYPESAFE_API_KEY` from the environment. Loading it from a `.env` file with `python-dotenv`, and failing early with a clear message when it's missing, saves confusion.
+- An invalid key raises `TypeSafeAuthenticationError` (401), and a bad request raises `TypeSafeBadRequestError` (400). Both are importable from `typesafe_sdk`, and `TypeSafeError` is the base class.
+- Use `TypeSafeClient` (sync, `with ... as c`) or `AsyncTypeSafeClient` (`async with ... as c`, then `await c.system_one(...)`). The call is `c.system_one(state=..., questions=..., extra_headers=...)`.
 
 ## Observations
 
 ### Confidence really does flag the genuinely ambiguous cases
-In `01_quickstart`, *"charged twice... fix this ASAP or I'm cancelling"* came back with these tones:
+A first test asked a Choice for the tone of a support message, plus an urgency Score and a "billing?" Noul. *"charged twice... fix this ASAP or I'm cancelling"* came back with these tones:
 
 | run | frustrated | angry | confidence |
 |---|---|---|---|
@@ -23,7 +43,7 @@ Honestly, I'd argue about that one myself. Meanwhile, on the same message, urgen
 Small run-to-run differences in the probabilities (about ±0.04 here) mean thresholds need a margin. Don't build logic that flips at exactly 0.5.
 
 ### A Noul is not a sentiment score
-In `02_primitives`, the review praised the battery but complained about the camera and support. The results:
+A phone review praised the battery but complained about the camera and support. Several Nouls and a satisfaction Score were asked about it. The results:
 - `mentions_battery` and `mentions_support` were both 1.00. These are factual, so they're near-certain.
 - `would_recommend` was 0.24, a real judgment that leaned no.
 - The `satisfaction` Score landed at 0.99 on a 0–2 scale ("mixed") with 0.98 confidence.
@@ -34,10 +54,10 @@ Asking "how satisfied?" as a Noul would have collapsed "mixed" into a meaningles
 With option descriptions plus a `"none"` escape hatch, `biggest_complaint` picked `camera` (0.88), and `support` came second (0.12). That's the right ranking, since the camera complaint was the stronger one.
 
 ### Combining judgments in code works well
-In `03_structured_state`, three independent Nouls (customer asked for a refund, charges actually duplicated, policy allows it) all came back at 0.97 or higher. The auto-approve rule `min(...) > 0.8` lives in Python, so I can change policy without touching the questions.
+With a JSON state (a customer message, an order's charges and a refund policy), three independent Nouls asked whether the customer asked for a refund, whether the charges were actually duplicated, and whether the policy allows it. All three came back at 0.97 or higher. The auto-approve rule `min(...) > 0.8` lives in Python, so I can change policy without touching the questions.
 
 ### Routing with speculative arguments is fast and clean
-`04_router` asks the intent plus every branch's arguments in **one request**:
+A command router asks a Choice for the intent (reminder, music, notes or unknown), plus every branch's arguments as extra questions, all in **one request**. Code then uses only the answers for the chosen branch:
 
 | input | intent (conf.) | args |
 |---|---|---|
@@ -49,17 +69,31 @@ In `03_structured_state`, three independent Nouls (customer asked for a refund, 
 The `"unknown"` option stopped off-topic requests from getting forced into a handler.
 
 ### Multi-dimension ranking
-`05_rank_async` scores 5 hackathon ideas on impact and feasibility, then gates the result on a `fits_goal` Noul. All 5 requests run concurrently with `asyncio.gather`. The ranking is sensible: the food-bank matcher came first and the from-scratch Rust kernel last. The joke Discord bot scored high on feasibility (0.97) but was correctly sunk by low impact. Weights live in a dict, so re-ranking costs no API calls.
-
-### Splat diff (`06_splat_diff`, `splat_diff/`)
-This experiment asks whether two Gaussian splat scans show the same object. The judgment part is written up in the guide below. The parts specific to the 3D app are:
-- **Alignment.** Separate captures need rotation, translation and scale solved for. Normalizing by spread was off by 19% once one scan lost a chunk, so scale is found by fitting.
-- **Rendering.** It's done with Spark (three.js).
-- **Test data.** `tools/make_variants.py` makes labelled pairs from one scan.
+Five hackathon ideas were each scored (Score) on impact and feasibility. Weighted in code, the result was then gated on a `fits_goal` Noul. All 5 requests run concurrently with `asyncio.gather`. The ranking is sensible: the food-bank matcher came first and the from-scratch Rust kernel last. The joke Discord bot scored high on feasibility (0.97) but was correctly sunk by low impact. Weights live in a dict, so re-ranking costs no API calls.
 
 ## Guide: building an image-comparison check with Jev
 
-Written for someone starting from zero (a person or a fresh Claude instance). It covers everything measured here that you need to rebuild a "do these two images show a real difference?" check. The web app isn't needed. Every number comes from the splat experiment: 11 labelled pairs × 12 views = 132 image pairs, scored with two prompt versions and repeated.
+Written for someone starting from zero (a person or a fresh Claude instance). It covers everything you need to build a "do these two images show a real physical difference?" check on Jev.
+
+### Where the numbers come from
+
+The task was comparing two Gaussian splat scans (3D captures) of objects that are supposed to be identical, and asking "is there a real difference?". Jev can't read 3D files, so the pipeline was:
+1. **Align.** Put the two scans in the same pose and scale. Separate captures differ in position, rotation and scale, so all three were solved by fitting the splat centers. Normalizing by the cloud's spread was off by 19% once one scan was missing a chunk.
+2. **Render.** Make 12 matched views of each scan from identical cameras.
+3. **Ask Jev.** One request per image pair.
+4. **Decide in code.** Combine the per-view answers into a verdict.
+
+**Test data:**
+- Two real object scans: a running shoe, and a plush moose on a wooden sled.
+- From each scan, 5 labelled variants. Every variant was moved to a random pose and scale, as if captured separately:
+  - **same:** 10% of splats dropped and slight color noise, as a negative control.
+  - **recolor:** one region's color changed.
+  - **missing part:** a chunk cut off one end.
+  - **extra part:** a copied lump added.
+  - **dent:** surface pushed in.
+- That makes 11 labelled pairs (one "same" control was run twice) × 12 views = **132 image pairs**. They were scored with two question wordings, and the final wording was run twice.
+
+Only the Jev part matters for reuse. Any source of matched image pairs works: photos, renders or screenshots.
 
 ### 1. Sending images to Jev (verified with `typesafe-sdk` 0.7.5)
 
@@ -105,7 +139,7 @@ Written for someone starting from zero (a person or a fresh Claude instance). It
 
 The structure is 5 Nouls per image pair: one alignment gate plus four difference categories. Phrase them so a high value means yes.
 
-Use this context string in `state["context"]`:
+Use this context string in `state["context"]`. It's written for 3D-scan renders. For other sources (e.g. photos), keep the structure: what the two images are, which artifacts to ignore (described by size and character), and which differences count even when they look messy. Then swap in the artifacts typical of your source.
 > `model_a` and `model_b` are renders of two separate 3D scans (Gaussian splats) of physical objects that are supposed to be identical. The scans were aligned and rendered from the same camera position. Decide whether the physical objects differ. Ignore scan artifacts: soft, blurry or fuzzy edges; faint speckle, thin wisps and small scattered floaters; tiny pinholes; slightly smeared texture; lighting, exposure, white balance and reflections. These ARE real differences, even when their edges look ragged or blurry: a sizeable part or chunk of the object that is present in one and missing in the other (the outline differs); a solid lump, part or object attached to or right next to the object in only one of them; a dent, bulge or bend; a region with a different color, pattern or material.
 
 | id | instructions | criteria `true` / `false` |
