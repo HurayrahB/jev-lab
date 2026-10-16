@@ -1,3 +1,10 @@
 typesafe-sdk>=0.7.5
 python-dotenv
 pytest
+# 06_splat_diff / splat_diff web app
+fastapi
+uvicorn
+python-multipart
+numpy
+scipy
+plyfile

@@ -68,7 +68,9 @@ Run the offline tests (no API key needed) with `python -m pytest`.
 
 ```
 jev.py               shared client setup and the show() pretty-printer
-01..05_*.py          experiments, each one isolating a single concept
+01..06_*.py          experiments, each one isolating a single concept
+splat_diff/          web app: compare two Gaussian splats with Jev (see below)
+tools/               make_variants.py: labelled test pairs from one splat
 playground.py        scratch file
 sample_outputs/      real responses captured from jev-latest
 tests/               offline pytest suite for the helpers
@@ -84,9 +86,28 @@ NOTES.md             findings, gotchas and takeaways
 | `03_structured_state.py` | JSON state, pointing at fields with backticks, and keeping the final decision in your code |
 | `04_router.py` | Natural language mapped to *your* functions plus their arguments, with a low-confidence fallback |
 | `05_rank_async.py` | Scoring many items in parallel, then weighting and ranking them in code |
+| `06_splat_diff.py` | Images in state: judging matched renders of two 3D scans, then aggregating many views in code |
 | `playground.py` | Blank slate for trying your own ideas |
 
 `jev.py` holds the shared helpers: `client()`, `async_client()` and `show(response)`. `show()` pretty-prints every answer with probability bars.
+
+## Splat diff: is there a difference between two 3D scans?
+
+Upload two Gaussian splats (.ply, .spz, .splat, .ksplat, .sog) of objects that should be identical. The app:
+1. aligns them (rotation, translation and scale; captures can be completely separate),
+2. renders 12 matched views of each, and
+3. asks Jev per view about shape, missing or extra parts, and color.
+
+Scan artifacts like blur, floaters and lighting are excluded. Code combines the answers into **Same / Different / Uncertain**.
+
+```bash
+uvicorn splat_diff.server:app            # then open http://localhost:8000
+python -m tools.make_variants some.ply  # optional: labelled test pairs in data/<name>/
+# open http://localhost:8000/?a=<name>/<name>_reference.ply&b=<name>/<name>_recolor.ply&auto=1
+python 06_splat_diff.py                  # re-judge every saved run in runs/ (no re-rendering)
+```
+
+Keep the tab in front while it renders, because background tabs are throttled. Results, what worked and what doesn't (dents) are in [NOTES.md](NOTES.md#splat-diff-are-these-two-gaussian-splats-the-same-object-06_splat_diff-splat_diff).
 
 ## Rules of thumb
 
