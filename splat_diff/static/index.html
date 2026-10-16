@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Splat Diff</title>
+<style>
+  :root {
+    --bg: #f6f6f4; --panel: #ffffff; --ink: #1c1c1a; --muted: #6b6b66; --line: #e2e1dc;
+    --accent: #2f5bd3; --same: #1f8a4c; --diff: #c4372b; --unsure: #b7791f; --a: #e07b2a; --b: #2f7fd3;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #151514; --panel: #1f1f1d; --ink: #ecebe6; --muted: #9a9a93; --line: #34342f; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  header { padding: 16px 24px; border-bottom: 1px solid var(--line); display: flex; gap: 12px; align-items: baseline; }
+  header h1 { font-size: 18px; margin: 0; }
+  header span { color: var(--muted); }
+  main { display: grid; grid-template-columns: minmax(320px, 1fr) 380px; gap: 20px; padding: 20px 24px; max-width: 1400px; }
+  @media (max-width: 900px) { main { grid-template-columns: 1fr; padding: 16px; } }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px; }
+  .drops { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
+  .drop { border: 2px dashed var(--line); border-radius: 10px; padding: 14px; text-align: center; cursor: pointer; min-height: 74px; }
+  .drop.over { border-color: var(--accent); }
+  .drop b { display: block; }
+  .drop[data-side=a] b { color: var(--a); } .drop[data-side=b] b { color: var(--b); }
+  .drop small { color: var(--muted); word-break: break-all; }
+  .stage { position: relative; aspect-ratio: 1; width: min(100%, 68vh); margin: 0 auto; background: #808080; border-radius: 10px; overflow: hidden; }
+  .stage canvas { width: 100%; height: 100%; display: block; }
+  .stage .tag { position: absolute; left: 10px; top: 10px; background: rgba(0,0,0,.55); color: #fff; padding: 2px 8px; border-radius: 6px; font-size: 12px; }
+  .stage .busy { position: absolute; inset: 0; display: none; place-items: center; background: rgba(0,0,0,.35); color: #fff; font-weight: 600; }
+  .stage .busy.on { display: grid; }
+  .row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 10px 0; }
+  .row > label { color: var(--muted); min-width: 70px; }
+  button { font: inherit; border: 1px solid var(--line); background: var(--panel); color: var(--ink); padding: 5px 10px; border-radius: 7px; cursor: pointer; }
+  button:hover:not(:disabled) { border-color: var(--accent); }
+  button.on { background: var(--accent); color: #fff; border-color: var(--accent); }
+  button:disabled { opacity: .45; cursor: default; }
+  button.primary { background: var(--accent); color: #fff; border-color: var(--accent); padding: 9px 16px; font-weight: 600; width: 100%; }
+  input[type=range] { flex: 1; }
+  h2 { font-size: 14px; margin: 0 0 8px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+  .metrics { font-variant-numeric: tabular-nums; color: var(--muted); font-size: 13px; }
+  .metrics .warn { color: var(--unsure); }
+  .verdict { border-radius: 10px; padding: 14px 16px; color: #fff; margin-bottom: 12px; }
+  .verdict b { font-size: 22px; display: block; }
+  .v-same { background: var(--same); } .v-different { background: var(--diff); }
+  .v-uncertain { background: var(--unsure); } .v-alignment_failed { background: #6b6b66; }
+  .cat { display: grid; grid-template-columns: 90px 1fr 40px; gap: 8px; align-items: center; margin: 4px 0; font-size: 13px; }
+  .bar { height: 8px; background: var(--line); border-radius: 4px; position: relative; overflow: hidden; }
+  .bar i { position: absolute; inset: 0 auto 0 0; background: var(--accent); }
+  .th { font-size: 13px; }
+  .th .row { margin: 4px 0; } .th output { width: 34px; text-align: right; font-variant-numeric: tabular-nums; }
+  .views { margin-top: 20px; grid-column: 1 / -1; }
+  .views table { width: 100%; border-collapse: collapse; font-size: 12px; font-variant-numeric: tabular-nums; }
+  .views td, .views th { padding: 6px; border-bottom: 1px solid var(--line); text-align: center; }
+  .views th { color: var(--muted); font-weight: 500; }
+  .views td:first-child { text-align: left; }
+  .views img { width: 120px; height: 120px; border-radius: 6px; display: block; }
+  .pair { display: flex; gap: 4px; }
+  .hi { color: var(--diff); font-weight: 700; } .lo { color: var(--muted); }
+  .dim { opacity: .4; }
+  .err { color: var(--diff); white-space: pre-wrap; }
+  .hint { color: var(--muted); font-size: 12px; }
+</style>
+<script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/",
+      "@sparkjsdev/spark": "https://cdn.jsdelivr.net/npm/@sparkjsdev/spark@2.2.0/dist/spark.module.js"
+    }
+  }
+</script>
+</head>
+<body>
+<header><h1>Splat Diff</h1><span>Are these two Gaussian splats the same object? Judged by Jev.</span></header>
+<main>
+  <section class="panel">
+    <div class="drops">
+      <label class="drop" data-side="a"><b>Model A</b><small>Drop a .ply / .spz or click</small><input type="file" accept=".ply,.spz,.splat,.ksplat,.sog" hidden></label>
+      <label class="drop" data-side="b"><b>Model B</b><small>Drop a .ply / .spz or click</small><input type="file" accept=".ply,.spz,.splat,.ksplat,.sog" hidden></label>
+    </div>
+    <div class="stage"><canvas id="view"></canvas><span class="tag" id="tag">load two models</span><div class="busy" id="busy"></div></div>
+    <div class="row"><label>Show</label>
+      <button data-mode="a">A</button><button data-mode="b">B</button>
+      <button data-mode="blink" class="on">Blink</button><button data-mode="overlay">Overlay</button>
+    </div>
+    <div class="row"><label>Fix B</label>
+      <button data-rot="b:x">Rot X 90°</button><button data-rot="b:y">Rot Y 90°</button><button data-rot="b:z">Rot Z 90°</button>
+      <button id="realign">Re-align</button>
+    </div>
+    <div class="row"><label>Scene up</label>
+      <button data-rot="w:x">Rot X 90°</button><button data-rot="w:z">Rot Z 90°</button>
+      <span class="hint">orient so the object stands upright</span>
+    </div>
+    <div class="row"><label>Crop</label><input type="range" id="crop" min="0.5" max="3" step="0.05" value="1.1"><output id="cropOut">1.10×</output></div>
+    <div class="metrics" id="metrics"></div>
+  </section>
+
+  <section>
+    <div class="panel">
+      <button class="primary" id="compare" disabled>Compare with Jev</button>
+      <p class="hint">Renders 12 matched views of each model and asks Jev about every pair.</p>
+      <div id="result"></div>
+      <div class="err" id="error"></div>
+    </div>
+    <div class="panel th" style="margin-top:12px">
+      <h2>Verdict thresholds</h2>
+      <p class="hint" style="margin-top:0">Changing these re-scores the saved answers. Jev isn't called again.</p>
+      <div class="row"><label>Different ≥</label><input type="range" data-th="different" min="0.3" max="0.99" step="0.01" value="0.5"><output></output></div>
+      <div class="row"><label>Same ≤</label><input type="range" data-th="same" min="0.01" max="0.5" step="0.01" value="0.25"><output></output></div>
+      <div class="row"><label>Aligned ≥</label><input type="range" data-th="viewpoint_min" min="0.1" max="0.9" step="0.05" value="0.5"><output></output></div>
+      <div class="row"><label>Support</label><input type="range" data-th="support" min="1" max="4" step="1" value="2"><output></output></div>
+    </div>
+  </section>
+
+  <section class="panel views" id="views" hidden>
+    <h2>Per-view answers <span id="runName" class="hint"></span></h2>
+    <table><thead><tr><th>View</th><th>A · B</th><th>aligned</th><th>shape</th><th>part</th><th>color</th><th>any</th></tr></thead><tbody></tbody></table>
+  </section>
+</main>
+<script type="module" src="app.js"></script>
+</body>
+</html>

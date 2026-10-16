@@ -1,0 +1,16 @@
+prompt v2   evidence = 2nd-strongest view per category
+
+run                                                         expected          verdict  shape  part  color   any
+nike_reference.ply__vs__nike_same.ply                           same             same  0.11  0.06  0.08  0.09 ok
+nike_reference.ply__vs__nike_same.ply                           same             same  0.13  0.07  0.10  0.09 ok
+nike_reference.ply__vs__nike_missing_part.ply              different        different  0.41  0.54  0.60  0.48 ok
+nike_reference.ply__vs__nike_extra_part.ply                different        different  0.31  0.70  0.28  0.54 ok
+nike_reference.ply__vs__nike_recolor.ply                   different        different  0.15  0.15  0.98  0.95 ok
+nike_reference.ply__vs__nike_dent.ply                      different             same  0.14  0.08  0.15  0.10 MISS
+plush_reference.ply__vs__plush_same.ply                         same             same  0.15  0.07  0.19  0.13 ok
+plush_reference.ply__vs__plush_missing_part.ply            different        different  0.54  0.71  0.32  0.65 ok
+plush_reference.ply__vs__plush_extra_part.ply              different        uncertain  0.20  0.40  0.18  0.26 MISS
+plush_reference.ply__vs__plush_recolor.ply                 different        different  0.17  0.16  0.98  0.95 ok
+plush_reference.ply__vs__plush_dent.ply                    different             same  0.15  0.10  0.21  0.15 MISS
+
+8/11 runs with known ground truth judged correctly

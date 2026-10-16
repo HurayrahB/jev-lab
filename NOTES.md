@@ -51,6 +51,33 @@ The `"unknown"` option stopped off-topic requests from getting forced into a han
 ### Multi-dimension ranking
 `05_rank_async` scores 5 hackathon ideas on impact and feasibility, then gates the result on a `fits_goal` Noul. All 5 requests run concurrently with `asyncio.gather`. The ranking is sensible: the food-bank matcher came first and the from-scratch Rust kernel last. The joke Discord bot scored high on feasibility (0.97) but was correctly sunk by low impact. Weights live in a dict, so re-ranking costs no API calls.
 
+### Splat diff: "are these two Gaussian splats the same object?" (`06_splat_diff`, `splat_diff/`)
+Jev can't read splats, but it does take images. The setup:
+- `splat_diff/align.py` registers the two scans, solving for rotation, translation and scale.
+- The browser renders 12 matched views of each scan.
+- Jev answers 5 Nouls per view pair: same viewpoint, shape diff, part diff, color diff, and any diff.
+- Code turns the answers into a verdict.
+
+Test pairs come from `tools/make_variants.py`. It takes a real object scan (a Nike shoe and a plush moose on a sled) and produces a randomly re-posed and rescaled "re-capture", plus 4 edited versions. All 11 test pairs are summarized in [`sample_outputs/06_splat_diff.txt`](sample_outputs/06_splat_diff.txt).
+
+| case | verdict | notes |
+|---|---|---|
+| same object, re-captured (3 runs) | **Same**, 3/3 | Every category stayed ≤ 0.19 in every run. No false alarms. |
+| region recolored (2) | **Different**, 2/2 | Color 0.98. Per view it's very clean: 0.8–0.9 where the patch is visible, ~0.05 where it's hidden. |
+| chunk cut off one end (2) | **Different**, 2/2 | Part 0.54–0.71. |
+| extra lump stuck on (2) | 1 Different, 1 Uncertain | The plush lump is tiny and I can barely see it myself. |
+| dent (2) | **Same**, 0/2 | Not Jev's fault, see the "dents" point below. |
+
+What I learned:
+- **Images work on `jev-latest`.** You need the `TypeSafe-Danger-Zone-Images: true` header. A 1024² image pair costs about 1.8k input tokens per request.
+- **The artifact rules fought the real differences.** The v1 context listed "holes" and "floating blobs" as scan artifacts to ignore. Jev followed that, so a sawn-off heel (ragged, hollow edge) and an extra lump (looks like a floater) came back as Same or Uncertain. v2 separates artifacts from differences by **size and character** instead ("ragged edges don't make a missing chunk an artifact"). That raised part evidence from 0.22–0.60 to 0.54–0.71, kept same-object runs ≤ 0.19, and stopped the recolor from also triggering `part_diff` (0.79 → 0.16).
+- **The "overall" Noul (`any_diff`) is more conservative than the specific ones.** The verdict uses all four categories, not just `any_diff`.
+- **Dents are invisible in splat renders.** Splats have their color baked in and there's no relighting, so a dent that doesn't change the outline doesn't change the pixels. Fixing that needs a geometry-shaded render pass (normals or depth), or a code-side surface-distance check. The current `align.py` overlap metric is too coarse for small dents.
+- **Separate captures need scale solved by fitting, not by spread.** Normalizing by median radius was off by 19% once one scan was missing a chunk. `align.py` now searches scale using the better of the two one-sided fits. All 10 real pairs align within ~2% of the true scale.
+- **Thresholds:** the gap between same-object runs (≤ 0.19) and visible edits (≥ 0.54) is wide, so the defaults are Different ≥ 0.5 and Same ≤ 0.25 (Uncertain in between). Evidence is the 2nd-strongest view, so one noisy view can't flip the verdict. These were picked on the same 11 cases, so re-check them on real captures. The UI sliders re-score without new Jev calls.
+- **Repeat runs agree within ±0.04**, so the margins above aren't noise.
+- **Capture speed:** a background or automated Chrome tab throttles timers to ~1/s, and Spark's sorting rides on timers. That makes 12 views take ~2.5 min there, versus seconds in a focused tab.
+
 ## Takeaways for the hackathon
 
 1. Ask several narrow questions per call rather than one broad one. It's the same cost in latency.
